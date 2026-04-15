@@ -35,16 +35,20 @@ So I built a tool that:
 * Includes a Streamlit dashboard for exploration
 
 ---
-Quick look at the dashboard:
+
 ## Screenshots
 
-### Getting Started / Welcome Screen
-![Welcome](screenshots/welcome.png)
+Quick look at the dashboard:
 
 ### Dashboard Overview
+
 ![Dashboard](screenshots/dashboard.png)
 
+### Getting Started / Welcome Screen
 
+![Welcome](screenshots/welcome.png)
+
+---
 
 ## Project Structure
 
@@ -103,8 +107,7 @@ Runs at: http://localhost:8501
 Core idea is simple:
 
 * If sample is not COMPLETED
-* And it's older than threshold
-  → mark it as delayed
+* And it's older than threshold → mark it as delayed
 
 Implemented using SQL:
 
