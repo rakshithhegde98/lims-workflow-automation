@@ -37,11 +37,14 @@ So I built a tool that:
 ---
 Quick look at the dashboard:
 ## Screenshots
-### Dashboard Overview
-![Dashboard](screenshots/dashboard.png)
 
 ### Getting Started / Welcome Screen
 ![Welcome](screenshots/welcome.png)
+
+### Dashboard Overview
+![Dashboard](screenshots/dashboard.png)
+
+
 
 ## Project Structure
 
