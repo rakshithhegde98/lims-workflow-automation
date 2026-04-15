@@ -1,26 +1,38 @@
 # 🔬 LIMS Workflow Automation Tool
 
-Automates sample delay detection and reporting for labs running LIMS (like LabVantage).
+Automates sample delay detection and reporting for labs using LIMS (like LabVantage).
 
-I built this because in most labs, tracking delayed samples is still a manual process — someone runs a SQL query, eyeballs the results, and maybe sends an email. This tool handles all of that automatically.
+I built this because in most labs, tracking delayed samples is still manual — someone runs a SQL query, scans results, and maybe sends an email. This tool removes that manual step.
 
 ---
 
 ## Why I Built This
 
-Working with LIMS systems, I kept seeing the same problem: samples move through stages (RECEIVED → IN_PROGRESS → COMPLETED), but when something gets stuck, nobody notices until it's too late. Lab managers end up writing ad-hoc SQL queries to find bottlenecks, and there's no easy way to get a quick daily overview.
+While working with LIMS systems, I kept seeing the same issue:
 
-So I built a tool that loads sample data, flags anything that's been sitting too long, and spits out a clean report — with an optional AI summary on top.
+Samples move through stages (RECEIVED → IN_PROGRESS → COMPLETED), but when something gets stuck, it’s not immediately visible. By the time someone checks, it’s already delayed.
+
+Most teams rely on ad-hoc SQL queries to find these issues, and there’s no simple way to get a quick daily view.
+
+So I built a tool that:
+
+* loads sample data
+* flags delays automatically
+* generates a clean daily report
 
 ---
 
 ## What It Does
 
-- Loads sample data (CSV) into SQLite and runs delay detection via SQL
-- Flags samples that haven't moved past their expected turnaround time
-- Breaks down delays by department, test type, and priority
-- Generates a formatted daily report (text + optional OpenAI summary)
-- Streamlit dashboard for visual exploration and CSV upload
+* Loads sample data (CSV → SQLite)
+* Flags samples exceeding turnaround time
+* Breaks down delays by:
+
+  * department
+  * test type
+  * priority
+* Generates a daily report (text + optional AI summary)
+* Includes a Streamlit dashboard for exploration
 
 ---
 
@@ -32,13 +44,13 @@ lims_workflow_tool/
 ├── main.py                     # CLI entry point
 ├── requirements.txt
 ├── data/
-│   └── sample_data.csv         # 40 sample records
+│   └── sample_data.csv
 ├── db/
-│   └── database.py             # All SQLite operations
+│   └── database.py             # DB + SQL logic
 ├── core/
-│   ├── report_generator.py     # Report formatting & export
-│   └── ai_summary.py           # Rule-based + OpenAI summaries
-└── reports/                    # Auto-generated reports land here
+│   ├── report_generator.py
+│   └── ai_summary.py
+└── reports/                    # generated reports
 ```
 
 ---
@@ -47,36 +59,46 @@ lims_workflow_tool/
 
 ### Install
 
-```bash
+```
 cd lims_workflow_tool
 pip install -r requirements.txt
 ```
 
+---
+
 ### CLI
 
-```bash
-python main.py                              # default sample data
-python main.py --csv path/to/data.csv       # your own data
-python main.py --threshold 5                # 5-day delay threshold
-python main.py --save-report                # save report to file
-python main.py --ai-summary                 # needs OPENAI_API_KEY env var
 ```
+python main.py
+python main.py --csv path/to/data.csv
+python main.py --threshold 5
+python main.py --save-report
+python main.py --ai-summary   # requires OPENAI_API_KEY
+```
+
+---
 
 ### Streamlit Dashboard
 
-```bash
+```
 streamlit run app.py
 ```
 
-Opens at `http://localhost:8501`.
+Runs at: http://localhost:8501
 
 ---
 
 ## How Delay Detection Works
 
-The core logic is a SQL UPDATE that checks: if a sample isn't COMPLETED and has been in the system longer than the threshold, mark it delayed.
+Core idea is simple:
 
-```sql
+* If sample is not COMPLETED
+* And it's older than threshold
+  → mark it as delayed
+
+Implemented using SQL:
+
+```
 UPDATE samples
 SET is_delayed = CASE
         WHEN status != 'COMPLETED'
@@ -91,48 +113,48 @@ SET is_delayed = CASE
     END
 ```
 
-Then aggregation queries break it down by priority, department, and test type — the stuff lab managers actually care about.
+Then aggregation queries break delays down by priority, department, and test type.
 
 ---
 
 ## CSV Format
 
-| Column | Required | Example |
-|--------|----------|---------|
-| `sample_id` | ✅ | S001 |
-| `request_id` | ✅ | REQ-101 |
-| `test_type` | ✅ | Blood Test |
-| `status` | ✅ | RECEIVED / IN_PROGRESS / COMPLETED |
-| `priority` | ❌ | NORMAL / HIGH / URGENT |
-| `department` | ❌ | Hematology |
-| `created_date` | ✅ | 2026-04-01 08:00:00 |
-| `updated_date` | ✅ | 2026-04-02 14:30:00 |
+| Column       | Required | Example                            |
+| ------------ | -------- | ---------------------------------- |
+| sample_id    | ✅        | S001                               |
+| request_id   | ✅        | REQ-101                            |
+| test_type    | ✅        | Blood Test                         |
+| status       | ✅        | RECEIVED / IN_PROGRESS / COMPLETED |
+| priority     | ❌        | NORMAL / HIGH / URGENT             |
+| department   | ❌        | Hematology                         |
+| created_date | ✅        | 2026-04-01 08:00:00                |
+| updated_date | ✅        | 2026-04-02 14:30:00                |
 
 ---
 
 ## LabVantage Mapping
 
-The schema is modeled after real LabVantage tables:
+This is loosely modeled around real LabVantage concepts:
 
-| This Project | LabVantage |
-|-------------|------------|
-| `samples` table | `s_sample` |
-| `sample_id` | `s_sampleid` |
-| `request_id` | `s_sdcid` |
-| `status` | `s_sample.status` |
-| `test_type` | `s_test.testid` |
-| `created_date` | `s_sample.createdt` |
-| Delay detection SQL | Custom SQL reports |
-| Report generation | Report Builder |
+| This Project      | LabVantage        |
+| ----------------- | ----------------- |
+| samples table     | s_sample          |
+| sample_id         | s_sampleid        |
+| request_id        | s_sdcid           |
+| status            | s_sample.status   |
+| test_type         | s_test.testid     |
+| created_date      | s_sample.createdt |
+| delay detection   | custom SQL report |
+| report generation | report builder    |
 
 ---
 
 ## What I Learned
 
-- Writing SQL that mirrors real LIMS queries (date math, CASE logic, priority ordering)
-- Structuring a Python project with clean separation between DB, logic, and UI
-- Building a Streamlit dashboard that's actually useful, not just a demo
-- Thinking about lab workflows from a manager's perspective — what info do they need and when
+* Writing SQL similar to real LIMS reporting (date logic, CASE, grouping)
+* Structuring a Python project (DB layer, logic layer, UI)
+* Building a Streamlit dashboard that’s actually usable
+* Thinking in terms of lab operations, not just code
 
 ---
 
@@ -142,6 +164,6 @@ Python · SQLite · Pandas · Streamlit · Plotly · OpenAI (optional)
 
 ---
 
-## License
+## Note
 
-Portfolio project — built for learning and demonstration.
+This is a portfolio project built to simulate real LIMS workflows and automation use cases.
