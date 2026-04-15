@@ -253,6 +253,11 @@ def render_dashboard():
             )
             fig_bar.update_layout(margin=dict(t=20, b=20, l=20, r=20))
             st.plotly_chart(fig_bar, width='stretch')
+
+            # Highlight the worst department
+            top_dept = dept_data.loc[dept_data['Delayed Count'].idxmax(), 'Department']
+            top_count = dept_data['Delayed Count'].max()
+            st.info(f"Most delays are in {top_dept} department ({top_count} samples)")
         else:
             st.info("No delays to display by department.")
 
