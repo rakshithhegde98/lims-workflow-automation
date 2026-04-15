@@ -17,7 +17,8 @@ DB_PATH = Path(__file__).parent / "lims_samples.db"
 def get_connection(db_path: str = None) -> sqlite3.Connection:
     """Open a connection. Defaults to the on-disk DB if no path given."""
     path = db_path or str(DB_PATH)
-    conn = sqlite3.connect(path)
+    # check_same_thread=False needed for Streamlit — it reruns in different threads
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
