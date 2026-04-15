@@ -1,4 +1,4 @@
-# 🔬 LIMS Workflow Automation Tool
+# 🔬 LIMS Sample Delay & Bottleneck Dashboard
 
 Automates sample delay detection and reporting for labs using LIMS (like LabVantage).
 
