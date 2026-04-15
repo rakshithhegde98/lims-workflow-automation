@@ -1,15 +1,7 @@
 """
-LIMS Workflow Automation Tool — Streamlit Web Application
+Streamlit dashboard for the LIMS tool.
 
-A simple, interactive UI for:
-- Uploading sample data (CSV)
-- Configuring delay thresholds
-- Viewing sample lifecycle status
-- Detecting and visualizing delays
-- Generating reports and AI summaries
-
-Run with:
-    streamlit run app.py
+Run with: streamlit run app.py
 """
 
 import streamlit as st
@@ -22,7 +14,6 @@ import sys
 import tempfile
 import os
 
-# Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from db.database import (
@@ -38,7 +29,7 @@ from db.database import (
 from core.report_generator import generate_daily_summary, export_delayed_to_csv
 from core.ai_summary import generate_rule_based_summary, generate_openai_summary
 
-# ─── Page Configuration ───
+# ─── Page config ───
 st.set_page_config(
     page_title="LIMS Workflow Automation Tool",
     page_icon="🔬",
@@ -46,7 +37,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ─── Custom CSS ───
+# ─── Styling ───
 st.markdown("""
 <style>
     .main-header {
@@ -90,7 +81,7 @@ st.markdown("""
 
 
 def init_session_state():
-    """Initialize session state variables."""
+    """Set defaults for session state keys if they don't exist yet."""
     if 'db_conn' not in st.session_state:
         st.session_state.db_conn = None
     if 'data_loaded' not in st.session_state:
@@ -104,7 +95,7 @@ def init_session_state():
 
 
 def load_data(csv_path: str, threshold: int) -> bool:
-    """Load data and run delay detection."""
+    """Spin up an in-memory DB, load the CSV, run delay detection."""
     try:
         conn = get_connection(":memory:")
         create_tables(conn)
@@ -124,10 +115,9 @@ def load_data(csv_path: str, threshold: int) -> bool:
 
 
 def render_sidebar():
-    """Render the sidebar with configuration options."""
+    """Sidebar: data source picker, threshold slider, analyze button."""
     st.sidebar.markdown("## ⚙️ Configuration")
 
-    # Data source selection
     st.sidebar.markdown("### 📂 Data Source")
     data_source = st.sidebar.radio(
         "Choose data source:",
@@ -148,17 +138,15 @@ def render_sidebar():
             help="CSV must have columns: sample_id, request_id, test_type, status, created_date, updated_date"
         )
 
-    # Threshold configuration
     st.sidebar.markdown("### ⏱️ Delay Threshold")
     threshold = st.sidebar.slider(
         "Days before marking as delayed:",
         min_value=1,
         max_value=14,
         value=3,
-        help="Samples not completed within this many days will be flagged as DELAYED"
+        help="Samples not completed within this many days will be flagged"
     )
 
-    # Process button
     st.sidebar.markdown("---")
     process_clicked = st.sidebar.button(
         "🚀 Analyze Samples",
@@ -168,7 +156,7 @@ def render_sidebar():
 
     if process_clicked:
         if data_source == "Upload CSV" and uploaded_file is not None:
-            # Save uploaded file temporarily
+            # Write uploaded file to a temp location so we can pass a path
             with tempfile.NamedTemporaryFile(delete=False, suffix='.csv', mode='w') as f:
                 f.write(uploaded_file.getvalue().decode('utf-8'))
                 csv_path = f.name
@@ -178,31 +166,29 @@ def render_sidebar():
                 success = load_data(csv_path, threshold)
                 if success:
                     st.sidebar.success(f"✅ Analysis complete!")
-                    # Clean up temp file
                     if data_source == "Upload CSV" and csv_path and os.path.exists(csv_path):
                         os.unlink(csv_path)
         else:
             st.sidebar.warning("Please upload a CSV file first.")
 
-    # OpenAI API Key (optional)
+    # Optional OpenAI key
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🤖 AI Summary (Optional)")
     api_key = st.sidebar.text_input(
         "OpenAI API Key",
         type="password",
-        help="Optional: Enter your OpenAI API key for AI-powered summaries"
+        help="Optional: for AI-powered summaries instead of rule-based ones"
     )
 
     return threshold, api_key
 
 
 def render_dashboard():
-    """Render the main dashboard."""
+    """Main dashboard tab — metrics cards and charts."""
     stats = st.session_state.stats
     delayed_df = st.session_state.delayed_df
     all_df = st.session_state.all_samples_df
 
-    # ─── Key Metrics ───
     st.markdown("### 📊 Key Metrics")
     col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -222,14 +208,13 @@ def render_dashboard():
             delta_color="inverse"
         )
 
-    # Completion rate
     if stats['total_samples'] > 0:
         completion_rate = stats['completed'] / stats['total_samples']
         st.progress(completion_rate, text=f"Completion Rate: {completion_rate*100:.1f}%")
 
     st.markdown("---")
 
-    # ─── Charts Row ───
+    # ─── Charts ───
     chart_col1, chart_col2 = st.columns(2)
 
     with chart_col1:
@@ -248,7 +233,6 @@ def render_dashboard():
                 'IN_PROGRESS': '#f39c12',
                 'RECEIVED': '#3498db',
             },
-            hole=0.4,
         )
         fig_pie.update_layout(margin=dict(t=20, b=20, l=20, r=20))
         st.plotly_chart(fig_pie, width='stretch')
@@ -272,7 +256,6 @@ def render_dashboard():
         else:
             st.info("No delays to display by department.")
 
-    # ─── Second Charts Row ───
     chart_col3, chart_col4 = st.columns(2)
 
     with chart_col3:
@@ -322,7 +305,7 @@ def render_dashboard():
 
 
 def render_delayed_samples():
-    """Render the delayed samples section."""
+    """Delayed samples tab — stats + color-coded table + CSV download."""
     delayed_df = st.session_state.delayed_df
     stats = st.session_state.stats
 
@@ -332,7 +315,6 @@ def render_delayed_samples():
         st.success("🎉 No delayed samples! All samples are on track.")
         return
 
-    # Delay statistics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Delayed", stats['delayed'])
@@ -341,10 +323,8 @@ def render_delayed_samples():
     with col3:
         st.metric("Max Delay (days)", stats['max_delay_days'])
 
-    # Delayed samples table with color coding
     st.markdown("#### Delayed Samples Detail")
 
-    # Style the dataframe
     def highlight_priority(val):
         if val == 'URGENT':
             return 'background-color: #ffcccc; color: #cc0000; font-weight: bold'
@@ -371,7 +351,6 @@ def render_delayed_samples():
 
     st.dataframe(styled_df, width='stretch', hide_index=True)
 
-    # Download button for delayed samples
     csv_data = delayed_df.to_csv(index=False)
     st.download_button(
         label="📥 Download Delayed Samples CSV",
@@ -382,12 +361,11 @@ def render_delayed_samples():
 
 
 def render_all_samples():
-    """Render the all samples view."""
+    """All samples tab — filterable table."""
     all_df = st.session_state.all_samples_df
 
     st.markdown("### 📋 All Samples")
 
-    # Filters
     filter_col1, filter_col2, filter_col3 = st.columns(3)
 
     with filter_col1:
@@ -411,7 +389,6 @@ def render_all_samples():
             default=sorted(all_df['department'].unique()),
         )
 
-    # Apply filters
     filtered_df = all_df[
         (all_df['status'].isin(status_filter)) &
         (all_df['priority'].isin(priority_filter)) &
@@ -420,7 +397,6 @@ def render_all_samples():
 
     st.markdown(f"Showing **{len(filtered_df)}** of **{len(all_df)}** samples")
 
-    # Color code the status column
     def color_status(val):
         colors = {
             'RECEIVED': 'color: #3498db; font-weight: bold',
@@ -444,7 +420,7 @@ def render_all_samples():
 
 
 def render_report(threshold: int, api_key: str):
-    """Render the report section."""
+    """Report tab — full text report + AI summary."""
     stats = st.session_state.stats
     delayed_df = st.session_state.delayed_df
 
@@ -456,7 +432,6 @@ def render_report(threshold: int, api_key: str):
         report = generate_daily_summary(stats, delayed_df, threshold)
         st.text(report)
 
-        # Download report
         st.download_button(
             label="📥 Download Report",
             data=report,
@@ -474,12 +449,11 @@ def render_report(threshold: int, api_key: str):
 
 
 def render_sample_lifecycle():
-    """Render sample lifecycle visualization."""
+    """Lifecycle tab — pick a sample and see where it is in the pipeline."""
     st.markdown("### 🔄 Sample Lifecycle Tracker")
 
     all_df = st.session_state.all_samples_df
 
-    # Sample selector
     sample_id = st.selectbox(
         "Select a sample to view its lifecycle:",
         options=all_df['sample_id'].tolist(),
@@ -509,12 +483,11 @@ def render_sample_lifecycle():
             with col2:
                 st.markdown("#### Lifecycle Progress")
 
-                # Visual lifecycle stages
                 stages = ['RECEIVED', 'IN_PROGRESS', 'COMPLETED']
                 current_status = sample['status']
                 current_idx = stages.index(current_status) if current_status in stages else 0
 
-                # Create a visual pipeline
+                # Show each stage as a step indicator
                 cols = st.columns(len(stages))
                 for i, stage in enumerate(stages):
                     with cols[i]:
@@ -532,7 +505,6 @@ def render_sample_lifecycle():
                             st.markdown(f"⬜ **{stage}**")
                             st.markdown("*Pending*")
 
-                # Timeline visualization
                 st.markdown("#### Timeline")
                 fig = go.Figure()
 
@@ -557,10 +529,8 @@ def render_sample_lifecycle():
 
 
 def main():
-    """Main application entry point."""
     init_session_state()
 
-    # Header
     st.markdown('<div class="main-header">🔬 LIMS Workflow Automation Tool</div>',
                 unsafe_allow_html=True)
     st.markdown(
@@ -570,12 +540,9 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # Sidebar
     threshold, api_key = render_sidebar()
 
-    # Main content
     if not st.session_state.data_loaded:
-        # Welcome screen
         st.markdown("---")
         st.markdown("""
         ### 👋 Welcome!
@@ -614,7 +581,6 @@ def main():
         | `updated_date` | Last status update | 2026-04-02 14:30:00 |
         """)
     else:
-        # Dashboard tabs
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📊 Dashboard",
             "⚠️ Delayed Samples",
@@ -625,20 +591,15 @@ def main():
 
         with tab1:
             render_dashboard()
-
         with tab2:
             render_delayed_samples()
-
         with tab3:
             render_all_samples()
-
         with tab4:
             render_sample_lifecycle()
-
         with tab5:
             render_report(threshold, api_key)
 
-    # Footer
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: #999; font-size: 0.8rem;'>"

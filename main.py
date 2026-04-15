@@ -1,24 +1,16 @@
 """
-LIMS Workflow Automation Tool — Main Entry Point (CLI)
-
-This script demonstrates the complete workflow:
-1. Load sample data from CSV into SQLite
-2. Run delay detection using SQL queries
-3. Generate summary statistics
-4. Produce a formatted report
-5. Generate an AI/rule-based summary
+CLI entry point — loads sample data, runs delay detection, prints a report.
 
 Usage:
-    python main.py                          # Use default sample data
-    python main.py --csv path/to/data.csv   # Use custom CSV file
-    python main.py --threshold 5            # Set delay threshold to 5 days
+    python main.py
+    python main.py --csv path/to/data.csv --threshold 5
+    python main.py --save-report --ai-summary
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
 from db.database import (
@@ -52,7 +44,7 @@ def main():
         '--threshold',
         type=int,
         default=3,
-        help='Number of days after which a sample is considered delayed (default: 3)'
+        help='Days before a sample is considered delayed (default: 3)'
     )
     parser.add_argument(
         '--save-report',
@@ -62,7 +54,7 @@ def main():
     parser.add_argument(
         '--ai-summary',
         action='store_true',
-        help='Generate AI-powered summary (requires OpenAI API key)'
+        help='Use OpenAI for the summary (requires OPENAI_API_KEY)'
     )
 
     args = parser.parse_args()
@@ -70,13 +62,13 @@ def main():
     print("\n🔬 LIMS Workflow Automation Tool")
     print("=" * 40)
 
-    # Step 1: Connect to database
+    # Set up in-memory DB
     print("\n📦 Step 1: Setting up database...")
-    conn = get_connection(":memory:")  # Use in-memory DB for CLI
+    conn = get_connection(":memory:")
     create_tables(conn)
     print("   ✅ Database ready")
 
-    # Step 2: Load CSV data
+    # Load CSV
     print(f"\n📂 Step 2: Loading data from {args.csv}...")
     try:
         record_count = load_csv_to_db(args.csv, conn)
@@ -88,22 +80,22 @@ def main():
         print(f"   ❌ Data error: {e}")
         sys.exit(1)
 
-    # Step 3: Run delay detection
+    # Run delay detection
     print(f"\n🔍 Step 3: Detecting delays (threshold: {args.threshold} days)...")
     delayed_count = run_delay_detection(conn, threshold_days=args.threshold)
     print(f"   ⚠️  Found {delayed_count} delayed sample(s)")
 
-    # Step 4: Get statistics
+    # Pull stats
     print("\n📊 Step 4: Generating statistics...")
     stats = get_summary_stats(conn)
     delayed_df = get_delayed_samples(conn)
 
-    # Step 5: Generate report
+    # Print report
     print("\n📝 Step 5: Generating report...\n")
     report = generate_daily_summary(stats, delayed_df, args.threshold)
     print(report)
 
-    # Step 6: Save report if requested
+    # Save if requested
     if args.save_report:
         report_path = save_report_to_file(report)
         print(f"\n💾 Report saved to: {report_path}")
@@ -112,7 +104,7 @@ def main():
             csv_path = export_delayed_to_csv(delayed_df)
             print(f"💾 Delayed samples CSV saved to: {csv_path}")
 
-    # Step 7: AI Summary
+    # Summary
     print("\n" + "=" * 70)
     if args.ai_summary:
         print("\n🤖 Generating AI Summary...")

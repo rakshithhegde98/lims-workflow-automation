@@ -1,13 +1,8 @@
 """
-Report Generator for LIMS Workflow Automation Tool.
+Report formatting and file export.
 
-Generates structured reports from sample data including:
-- Daily summary reports
-- Delayed sample reports
-- Department-wise analysis
-
-In a real LabVantage environment, these reports would be configured
-through the LIMS reporting module or exported via scheduled jobs.
+Builds the daily summary text report and handles saving
+reports / delayed-sample CSVs to disk.
 """
 
 import pandas as pd
@@ -17,17 +12,7 @@ from pathlib import Path
 
 def generate_daily_summary(stats: dict, delayed_df: pd.DataFrame,
                            threshold_days: int = 3) -> str:
-    """
-    Generate a formatted daily summary report.
-
-    Args:
-        stats: Dictionary of summary statistics from database
-        delayed_df: DataFrame of delayed samples
-        threshold_days: Delay threshold used
-
-    Returns:
-        Formatted report string
-    """
+    """Build a formatted text report from stats and delayed sample data."""
     report_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     lines = []
@@ -48,13 +33,12 @@ def generate_daily_summary(stats: dict, delayed_df: pd.DataFrame,
     lines.append(f"  ⚠️  Delayed          : {stats['delayed']}")
     lines.append("")
 
-    # Completion rate
     if stats['total_samples'] > 0:
         completion_rate = (stats['completed'] / stats['total_samples']) * 100
         lines.append(f"  Completion Rate    : {completion_rate:.1f}%")
     lines.append("")
 
-    # --- Delay Analysis ---
+    # --- Delay breakdown ---
     if stats['delayed'] > 0:
         lines.append("⚠️  DELAY ANALYSIS")
         lines.append("-" * 40)
@@ -62,7 +46,6 @@ def generate_daily_summary(stats: dict, delayed_df: pd.DataFrame,
         lines.append(f"  Maximum Delay      : {stats['max_delay_days']} days")
         lines.append("")
 
-        # By Priority
         if stats.get('delayed_by_priority'):
             lines.append("  Delayed by Priority:")
             for priority, count in stats['delayed_by_priority'].items():
@@ -70,21 +53,19 @@ def generate_daily_summary(stats: dict, delayed_df: pd.DataFrame,
                 lines.append(f"    {icon} {priority:10s} : {count}")
             lines.append("")
 
-        # By Department
         if stats.get('delayed_by_department'):
             lines.append("  Delayed by Department:")
             for dept, count in stats['delayed_by_department'].items():
                 lines.append(f"    📁 {dept:20s} : {count}")
             lines.append("")
 
-        # By Test Type
         if stats.get('delayed_by_test_type'):
             lines.append("  Delayed by Test Type:")
             for test, count in stats['delayed_by_test_type'].items():
                 lines.append(f"    🧪 {test:20s} : {count}")
             lines.append("")
 
-        # --- Delayed Samples Detail ---
+        # Individual delayed samples
         lines.append("📋 DELAYED SAMPLES DETAIL")
         lines.append("-" * 70)
         lines.append(f"  {'Sample ID':<12} {'Test Type':<22} {'Status':<14} "
@@ -110,16 +91,7 @@ def generate_daily_summary(stats: dict, delayed_df: pd.DataFrame,
 
 
 def save_report_to_file(report_text: str, output_dir: str = None) -> str:
-    """
-    Save the report to a text file.
-
-    Args:
-        report_text: The formatted report string
-        output_dir: Directory to save the report
-
-    Returns:
-        Path to the saved report file
-    """
+    """Write the report to a timestamped .txt file. Returns the file path."""
     if output_dir is None:
         output_dir = Path(__file__).parent.parent / "reports"
 
@@ -137,16 +109,7 @@ def save_report_to_file(report_text: str, output_dir: str = None) -> str:
 
 
 def export_delayed_to_csv(delayed_df: pd.DataFrame, output_dir: str = None) -> str:
-    """
-    Export delayed samples to a CSV file for further analysis.
-
-    Args:
-        delayed_df: DataFrame of delayed samples
-        output_dir: Directory to save the CSV
-
-    Returns:
-        Path to the saved CSV file
-    """
+    """Dump delayed samples to CSV for further analysis. Returns file path."""
     if output_dir is None:
         output_dir = Path(__file__).parent.parent / "reports"
 

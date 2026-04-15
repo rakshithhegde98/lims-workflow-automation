@@ -1,13 +1,8 @@
 """
-Database module for LIMS Workflow Automation Tool.
+SQLite operations for sample tracking.
 
-This module handles all SQLite database operations including:
-- Creating the samples table
-- Loading CSV data into the database
-- Running SQL queries for reporting and delay detection
-
-In a real LabVantage LIMS, these tables would be part of the LIMS schema
-(e.g., s_sample, s_sample_test). Here we simulate a simplified version.
+Handles table creation, CSV ingestion, delay detection,
+and all the reporting queries.
 """
 
 import sqlite3
@@ -20,7 +15,7 @@ DB_PATH = Path(__file__).parent / "lims_samples.db"
 
 
 def get_connection(db_path: str = None) -> sqlite3.Connection:
-    """Create and return a database connection."""
+    """Open a connection. Defaults to the on-disk DB if no path given."""
     path = db_path or str(DB_PATH)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
@@ -28,12 +23,7 @@ def get_connection(db_path: str = None) -> sqlite3.Connection:
 
 
 def create_tables(conn: sqlite3.Connection) -> None:
-    """
-    Create the samples table in SQLite.
-
-    This mirrors a simplified version of the LabVantage s_sample table
-    with key fields for tracking sample lifecycle.
-    """
+    """Set up the samples table (simplified version of LabVantage s_sample)."""
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS samples (
@@ -53,41 +43,28 @@ def create_tables(conn: sqlite3.Connection) -> None:
 
 
 def load_csv_to_db(csv_path: str, conn: sqlite3.Connection) -> int:
-    """
-    Load sample data from a CSV file into the SQLite database.
-
-    Args:
-        csv_path: Path to the CSV file
-        conn: SQLite connection
-
-    Returns:
-        Number of records loaded
-    """
+    """Read a CSV into the samples table. Returns row count."""
     df = pd.read_csv(csv_path)
 
-    # Validate required columns
     required_cols = ['sample_id', 'request_id', 'test_type', 'status',
                      'created_date', 'updated_date']
     missing = [c for c in required_cols if c not in df.columns]
     if missing:
         raise ValueError(f"CSV is missing required columns: {missing}")
 
-    # Add optional columns with defaults if missing
+    # Fill in optional columns if they're not in the CSV
     if 'priority' not in df.columns:
         df['priority'] = 'NORMAL'
     if 'department' not in df.columns:
         df['department'] = 'General'
 
-    # Initialize delay columns
     df['is_delayed'] = 0
     df['delay_days'] = 0.0
 
-    # Drop existing data and reload
     cursor = conn.cursor()
     cursor.execute("DELETE FROM samples")
     conn.commit()
 
-    # Insert records
     df.to_sql('samples', conn, if_exists='replace', index=False)
 
     return len(df)
@@ -96,30 +73,15 @@ def load_csv_to_db(csv_path: str, conn: sqlite3.Connection) -> int:
 def run_delay_detection(conn: sqlite3.Connection, threshold_days: int = 3,
                         reference_date: str = None) -> int:
     """
-    Detect delayed samples using SQL.
-
-    A sample is considered DELAYED if:
-    - Its status is NOT 'COMPLETED'
-    - It has been in the system for more than `threshold_days` days
-
-    This is the kind of query a LabVantage admin would run regularly
-    to identify bottlenecks in the lab workflow.
-
-    Args:
-        conn: SQLite connection
-        threshold_days: Number of days after which a sample is considered delayed
-        reference_date: Date to calculate delay from (defaults to today)
-
-    Returns:
-        Number of delayed samples found
+    Flag samples as delayed if they're not COMPLETED and have been
+    sitting longer than threshold_days. Returns count of delayed samples.
     """
     if reference_date is None:
         reference_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     cursor = conn.cursor()
 
-    # SQL query to detect delays — this demonstrates real SQL skills
-    # julianday() is SQLite's date function, similar to DATEDIFF in other DBs
+    # julianday() is SQLite's way of doing date math — similar to DATEDIFF elsewhere
     update_query = """
         UPDATE samples
         SET
@@ -143,21 +105,15 @@ def run_delay_detection(conn: sqlite3.Connection, threshold_days: int = 3,
     ))
     conn.commit()
 
-    # Count delayed samples
     count_query = "SELECT COUNT(*) as cnt FROM samples WHERE is_delayed = 1"
     result = cursor.execute(count_query).fetchone()
     return result['cnt'] if result else 0
 
 
 def get_summary_stats(conn: sqlite3.Connection) -> dict:
-    """
-    Generate summary statistics using SQL aggregation.
-
-    Returns a dictionary with counts by status and delay information.
-    """
+    """Pull aggregate stats — status counts, delay breakdowns, averages."""
     cursor = conn.cursor()
 
-    # Overall counts by status
     status_query = """
         SELECT
             COUNT(*) as total_samples,
@@ -177,7 +133,7 @@ def get_summary_stats(conn: sqlite3.Connection) -> dict:
         'delayed': row['delayed_count'],
     }
 
-    # Delayed samples by priority
+    # Ordered by business priority so URGENT shows up first
     priority_query = """
         SELECT priority, COUNT(*) as cnt
         FROM samples
@@ -195,7 +151,6 @@ def get_summary_stats(conn: sqlite3.Connection) -> dict:
         for r in cursor.execute(priority_query).fetchall()
     }
 
-    # Delayed samples by department
     dept_query = """
         SELECT department, COUNT(*) as cnt
         FROM samples
@@ -208,7 +163,6 @@ def get_summary_stats(conn: sqlite3.Connection) -> dict:
         for r in cursor.execute(dept_query).fetchall()
     }
 
-    # Delayed samples by test type
     test_query = """
         SELECT test_type, COUNT(*) as cnt
         FROM samples
@@ -221,7 +175,6 @@ def get_summary_stats(conn: sqlite3.Connection) -> dict:
         for r in cursor.execute(test_query).fetchall()
     }
 
-    # Average delay days
     avg_query = """
         SELECT
             ROUND(AVG(delay_days), 1) as avg_delay,
@@ -237,11 +190,7 @@ def get_summary_stats(conn: sqlite3.Connection) -> dict:
 
 
 def get_delayed_samples(conn: sqlite3.Connection) -> pd.DataFrame:
-    """
-    Retrieve all delayed samples with details, ordered by delay severity.
-
-    This query demonstrates JOIN-like thinking and ordering by business priority.
-    """
+    """Get all delayed samples, sorted by priority then worst delay first."""
     query = """
         SELECT
             sample_id,
@@ -267,7 +216,7 @@ def get_delayed_samples(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 def get_all_samples(conn: sqlite3.Connection) -> pd.DataFrame:
-    """Retrieve all samples from the database."""
+    """Fetch every sample, ordered by creation date."""
     query = """
         SELECT
             sample_id,
@@ -287,12 +236,7 @@ def get_all_samples(conn: sqlite3.Connection) -> pd.DataFrame:
 
 
 def get_sample_lifecycle(conn: sqlite3.Connection, sample_id: str) -> dict:
-    """
-    Get lifecycle details for a specific sample.
-
-    In LabVantage, this would involve querying s_sample and related
-    audit trail tables to track status changes.
-    """
+    """Look up a single sample's full record."""
     cursor = conn.cursor()
     query = """
         SELECT *

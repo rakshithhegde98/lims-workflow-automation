@@ -1,13 +1,8 @@
 """
-AI Summary Module for LIMS Workflow Automation Tool.
+Summary generation — rule-based by default, OpenAI if a key is available.
 
-Generates natural language summaries of sample delays and lab status.
-Supports two modes:
-1. Rule-based summary (no API key needed) — always available
-2. OpenAI-powered summary (requires API key) — optional enhancement
-
-This demonstrates the ability to integrate AI into lab workflows
-for better communication and decision-making.
+The rule-based version covers the common patterns (worst department,
+urgent flags, etc.) so it's useful even without an API key.
 """
 
 import os
@@ -16,17 +11,8 @@ import pandas as pd
 
 def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
     """
-    Generate a natural language summary using rule-based logic.
-
-    This works without any API key and provides a clear, readable summary
-    that a lab manager could use in daily standup meetings.
-
-    Args:
-        stats: Summary statistics dictionary
-        delayed_df: DataFrame of delayed samples
-
-    Returns:
-        Natural language summary string
+    Build a plain-English summary from the stats dict.
+    No API needed — just pattern matching on the numbers.
     """
     parts = []
 
@@ -36,10 +22,8 @@ def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
     in_progress = stats['in_progress']
     received = stats['received']
 
-    # Opening statement
     parts.append(f"📋 **Daily Lab Summary**\n")
 
-    # Overall status
     completion_pct = (completed / total * 100) if total > 0 else 0
     parts.append(
         f"Today, the lab has **{total} samples** in the system. "
@@ -47,7 +31,6 @@ def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
         f"**{in_progress}** are in progress, and **{received}** are awaiting processing."
     )
 
-    # Delay information
     if delayed > 0:
         avg_delay = stats.get('avg_delay_days', 0)
         max_delay = stats.get('max_delay_days', 0)
@@ -58,7 +41,7 @@ def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
             f"and the longest delay being **{max_delay} days**."
         )
 
-        # Most affected department
+        # Which department is hurting the most
         dept_delays = stats.get('delayed_by_department', {})
         if dept_delays:
             worst_dept = max(dept_delays, key=dept_delays.get)
@@ -68,7 +51,7 @@ def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
                 f"with **{worst_count} delayed sample(s)**."
             )
 
-        # Most delayed test type
+        # Which test type keeps getting stuck
         test_delays = stats.get('delayed_by_test_type', {})
         if test_delays:
             worst_test = max(test_delays, key=test_delays.get)
@@ -78,7 +61,7 @@ def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
                 f"({worst_test_count} sample(s))."
             )
 
-        # Priority breakdown
+        # Call out urgent/high priority stuff — that's what managers want to see
         priority_delays = stats.get('delayed_by_priority', {})
         urgent_count = priority_delays.get('URGENT', 0)
         high_count = priority_delays.get('HIGH', 0)
@@ -93,7 +76,6 @@ def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
                 f"🟡 {high_count} HIGH priority sample(s) are also delayed."
             )
 
-        # Recommendation
         parts.append(
             f"\n💡 **Recommendation:** Review the {worst_dept} department workflow "
             f"and prioritize clearing the backlog of {worst_test} tests."
@@ -110,18 +92,8 @@ def generate_rule_based_summary(stats: dict, delayed_df: pd.DataFrame) -> str:
 def generate_openai_summary(stats: dict, delayed_df: pd.DataFrame,
                             api_key: str = None) -> str:
     """
-    Generate a natural language summary using OpenAI's API.
-
-    This is an optional enhancement that provides more nuanced,
-    context-aware summaries.
-
-    Args:
-        stats: Summary statistics dictionary
-        delayed_df: DataFrame of delayed samples
-        api_key: OpenAI API key (falls back to env variable)
-
-    Returns:
-        AI-generated summary string
+    Hit OpenAI for a more nuanced summary. Falls back to rule-based
+    if no key is set or the call fails.
     """
     key = api_key or os.environ.get('OPENAI_API_KEY')
 
@@ -133,7 +105,6 @@ def generate_openai_summary(stats: dict, delayed_df: pd.DataFrame,
 
         client = OpenAI(api_key=key)
 
-        # Build context for the AI
         delayed_info = ""
         if not delayed_df.empty:
             delayed_info = delayed_df.to_string(index=False)
