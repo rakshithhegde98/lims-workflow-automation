@@ -35,6 +35,13 @@ So I built a tool that:
 * Includes a Streamlit dashboard for exploration
 
 ---
+Quick look at the dashboard:
+## Screenshots
+### Dashboard Overview
+![Dashboard](screenshots/dashboard.png)
+
+### Getting Started / Welcome Screen
+![Welcome](screenshots/welcome.png)
 
 ## Project Structure
 
